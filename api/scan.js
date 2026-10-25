@@ -78,6 +78,13 @@ async function readBody(req) {
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method' });
+  // Solo aceptamos peticiones hechas desde este mismo sitio (frena el uso de la clave desde otras webs).
+  const origin = req.headers.origin;
+  if (origin) {
+    let ok = false;
+    try { ok = new URL(origin).host === req.headers.host; } catch { /* origen inválido */ }
+    if (!ok) return json(res, 403, { ok: false, error: 'origin', message: 'Origen no permitido.' });
+  }
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return json(res, 503, { ok: false, error: 'no_key', message: 'Falta ANTHROPIC_API_KEY en las variables de entorno de Vercel.' });
 
