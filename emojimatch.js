@@ -233,37 +233,57 @@
 
   /** Mezcla IA + local. ai: respuesta de /api/scan (o {ok:false}); local: salida de classify. */
   function merge(ai, local) {
-    const rawLocal = local && local.ok && Array.isArray(local.ranking) ? local.ranking : [];
-    // La softmax solo ordena opciones: no prueba que la silueta coincida de verdad.
-    // Solo permitimos que el análisis local influya si su mejor semejanza absoluta es razonable.
-    const localPeak = rawLocal.length ? Number(rawLocal[0].score) || 0 : 0;
-    const L = localPeak >= 0.30 ? rawLocal.slice(0, 5) : [];
+    const ranking = local && local.ok && Array.isArray(local.ranking) ? local.ranking : [];
+    const localBest = ranking[0] || null;
+    const localNext = ranking[1] || null;
+    const localScore = localBest ? Number(localBest.score) || 0 : 0;
+    const localMargin = localBest ? localScore - (localNext ? Number(localNext.score) || 0 : 0) : 0;
+
+    // La puntuación softmax local solo ordena formas; NO es una probabilidad calibrada.
+    // Cuando la IA falla, se ofrecen sugerencias de baja confianza, nunca un registro automático.
     if (!ai || !ai.ok) {
-      if (!L.length) return ai;
-      const cands = L.slice(0, 3).map(s => ({ id: s.id, confidence: s.confidence }));
-      return { ok: true, speciesId: null, confidence: cands[0].confidence, candidates: cands, isFigure: true, quality: 'buena', local: true,
-        note: 'Reconocimiento local por silueta (sin IA).', aiError: ai && ai.error };
+      if (!localBest || localScore < 0.38 || localMargin < 0.025) return ai;
+      const candidates = ranking
+        .filter(s => (Number(s.score) || 0) >= Math.max(0.30, localScore - 0.07))
+        .slice(0, 3)
+        .map(s => ({ id: s.id, confidence: Math.min(0.48, Math.max(0.08, Number(s.confidence) || 0)) }));
+      return {
+        ok: true, speciesId: null, confidence: candidates[0]?.confidence || 0,
+        candidates, isFigure: true, quality: 'boa', local: true,
+        note: 'A IA não respondeu. Estas são apenas sugestões de silhueta; confirme a espécie manualmente.',
+        aiError: ai && ai.error,
+      };
     }
-    if (!L.length) return ai;
-    const lmap = Object.fromEntries(L.map(s => [s.id, s]));
-    const board = {};
-    for (const c of ai.candidates || []) board[c.id] = c.confidence;
-    if (ai.speciesId && !(ai.speciesId in board)) board[ai.speciesId] = ai.confidence;
-    // Si la IA y la silueta coinciden, sube; si la silueta discrepa claramente, el empate lo decide el local.
-    const out = {};
-    for (const id of new Set([...Object.keys(board), L[0].id])) {
-      const a = board[id] || 0, l = lmap[id] ? lmap[id].confidence : 0;
-      out[id] = Math.min(0.99, a + (a > 0 ? 0.12 * (l / 0.7) : 0.25 * (l / 0.7) * (ai.isFigure ? 1 : 0)));
+
+    // Se a visão diz que não existe uma figura válida, o classificador de silhueta não pode contradizê-la.
+    if (ai.isFigure !== true) {
+      return Object.assign({}, ai, { speciesId: null, confidence: Math.min(Number(ai.confidence) || 0, 0.2), candidates: [] });
     }
-    const cands = Object.entries(out).map(([id, confidence]) => ({ id, confidence })).sort((x, y) => y.confidence - x.confidence).slice(0, 3);
-    const top = cands[0];
-    const agree = ai.speciesId && ai.speciesId === L[0].id;
-    let confidence = top && top.id === ai.speciesId ? Math.min(0.99, ai.confidence + (agree ? 0.08 : 0)) : (top ? top.confidence : ai.confidence);
-    let speciesId = ai.speciesId && top && top.id === ai.speciesId ? ai.speciesId : (ai.speciesId && ai.confidence >= 0.6 ? ai.speciesId : null);
-    if (speciesId && ai.speciesId !== speciesId) confidence = Math.min(confidence, 0.55);
-    // Desacuerdo claro y la IA no está muy segura → que el usuario elija entre las sugerencias.
-    if (speciesId && !agree && L[0].confidence >= 0.4 && ai.confidence < 0.85) { speciesId = null; confidence = Math.min(confidence, 0.55); }
-    return Object.assign({}, ai, { speciesId, confidence, candidates: cands, localAgrees: !!agree });
+
+    const aiCandidates = Array.isArray(ai.candidates) ? ai.candidates
+      .filter(c => c && EMOJIS[c.id] && Number.isFinite(Number(c.confidence)))
+      .map(c => ({ id: c.id, confidence: Math.max(0, Math.min(1, Number(c.confidence))) }))
+      .sort((a, b) => b.confidence - a.confidence) : [];
+    const aiId = ai.speciesId && EMOJIS[ai.speciesId] ? ai.speciesId : null;
+    const aiConfidence = Math.max(0, Math.min(1, Number(ai.confidence) || 0));
+    if (aiId && !aiCandidates.some(c => c.id === aiId)) aiCandidates.unshift({ id: aiId, confidence: aiConfidence });
+
+    // O sinal local só pode adicionar uma alternativa quando a forma realmente combina.
+    // Nunca cancela nem substitui uma identificação visual confirmada pela IA.
+    const candidates = aiCandidates.slice(0, 3);
+    if (localBest && localScore >= 0.43 && localMargin >= 0.055 &&
+        !candidates.some(c => c.id === localBest.id) && candidates.length < 3) {
+      candidates.push({ id: localBest.id, confidence: Math.min(0.39, Math.max(0.12, Number(localBest.confidence) || 0)) });
+      candidates.sort((a, b) => b.confidence - a.confidence);
+    }
+
+    const confirmedId = aiId && aiConfidence >= 0.72 ? aiId : null;
+    return Object.assign({}, ai, {
+      speciesId: confirmedId,
+      confidence: aiConfidence,
+      candidates: candidates.slice(0, 3),
+      localAgrees: !!(aiId && localBest && aiId === localBest.id),
+    });
   }
 
   root.EmojiMatch = { classify, merge, loadRefs, refCount: () => Object.keys(refs).length, segment, describe, EMOJIS, _templates: buildTemplates };
