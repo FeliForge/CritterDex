@@ -353,7 +353,7 @@ async function runScan(canvases, q) {
   clearInterval(statusTimer);
   statusTimer = setInterval(() => { step = Math.min(step + 1, SCAN_STEPS.length - 1); setScanStatus(SCAN_STEPS[step], true); }, 1100);
   const minWait = sleep(1400); // que la animación se vea aunque responda rápido
-  const [aiRes] = await Promise.all([callScan(canvases), sleep(0)]);
+  const [aiRes] = await Promise.all([callScan(canvases), window.EmojiMatch ? window.EmojiMatch.loadRefs() : null]);
   let res = aiRes;
   try { // silueta local (emojis): complementa a la IA o la sustituye si falla
     const local = window.EmojiMatch ? window.EmojiMatch.classify(canvases) : null;

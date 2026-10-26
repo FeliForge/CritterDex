@@ -2,6 +2,7 @@
 // → { ok, speciesId|null, confidence (0..1), candidates:[{id,confidence}], isToy, quality, note }
 // Requiere la variable de entorno ANTHROPIC_API_KEY en Vercel. SCAN_MODEL es opcional.
 const SPECIES = require('./_species');
+const REF_SHEET = require('./_refsheet');
 
 const MODEL = process.env.SCAN_MODEL || 'claude-sonnet-5-5';
 const MAX_IMAGES = 3;
@@ -32,7 +33,8 @@ Reglas:
 4. Si la figura es un animal que NO está en el catálogo, species_id = null.
 5. La confidence debe estar calibrada: >0.85 solo con rasgos distintivos claramente visibles; 0.5-0.85 con duda razonable; <0.5 si adivinas.
 6. candidates incluye hasta 3 ids del catálogo ordenados de mayor a menor confianza, aunque species_id sea null.
-7. No inventes: usa solo los ids del catálogo.`;
+7. No inventes: usa solo los ids del catálogo.
+8. La PRIMERA imagen es una hoja de referencia con las 15 figuras reales (numeradas, en el orden del catálogo). Compara la silueta, proporciones y rasgos de la foto con esas figuras. La figura de la foto puede estar impresa en OTRO color, en otro ángulo o con otra iluminación; no es una imagen de la hoja.`;
 
 const TOOL = {
   name: 'report_scan',
@@ -103,6 +105,9 @@ module.exports = async function handler(req, res) {
   }
 
   const content = [
+    { type: 'text', text: 'Hoja de referencia del catálogo (no es la foto a identificar):' },
+    { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: REF_SHEET } },
+    { type: 'text', text: images.length > 1 ? 'Fotos a identificar:' : 'Foto a identificar:' },
     ...images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.mediaType, data: im.data } })),
     { type: 'text', text: images.length > 1 ? `Son ${images.length} fotos del mismo objeto. Identifica la figura.` : 'Identifica la figura.' },
   ];

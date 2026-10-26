@@ -66,7 +66,31 @@
     return 0.45 * iou + 0.38 * rs + 0.17 * as;
   }
 
-  // Plantillas (se calculan una vez, perezosamente).
+  // Siluetas de las figuras reales (ref/<id>.png con alfa). Prioridad sobre los emojis.
+  const refs = {}; let refsReady = null;
+  function loadRefs(base) {
+    if (refsReady) return refsReady;
+    base = base || 'ref/';
+    refsReady = Promise.all(Object.keys(EMOJIS).map(id => new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const k = 160 / Math.max(img.naturalWidth, img.naturalHeight), w = Math.max(8, Math.round(img.naturalWidth * k)), h = Math.max(8, Math.round(img.naturalHeight * k));
+          const c = newCanvas(w, h), x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, w, h);
+          const d = x.getImageData(0, 0, w, h).data, m = new Uint8Array(w * h);
+          for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 128 ? 1 : 0;
+          const desc = describe(largest(m, w, h), w, h);
+          if (desc) { desc.isRef = true; const mm = mirror(desc); mm.isRef = true; refs[id] = [desc, mm]; }
+        } catch (e) { /* sin plantilla de referencia */ }
+        res();
+      };
+      img.onerror = () => res();
+      img.src = base + id + '.png';
+    }))).then(() => Object.keys(refs).length);
+    return refsReady;
+  }
+
+  // Plantillas de emoji (se calculan una vez, perezosamente).
   let templates = null;
   function buildTemplates() {
     if (templates) return templates;
@@ -116,9 +140,22 @@
     for (let y = 0; y < h; y++) for (let xx = 0; xx < w; xx++) if (y < t || y >= h - t || xx < t || xx >= w - t) ring.push((y * w + xx) * 4);
     const med = ch => { const v = ring.map(i => d[i + ch]).sort((a, b) => a - b); return v[v.length >> 1]; };
     const bg = [med(0), med(1), med(2)];
-    let bgDev = 0; for (const i of ring) bgDev += Math.hypot(d[i] - bg[0], d[i + 1] - bg[1], d[i + 2] - bg[2]); bgDev /= ring.length;
-    const dist = new Float32Array(w * h), hist = new Float32Array(64); let mx = 1;
-    for (let i = 0; i < w * h; i++) { dist[i] = Math.hypot(d[i * 4] - bg[0], d[i * 4 + 1] - bg[1], d[i * 4 + 2] - bg[2]); if (dist[i] > mx) mx = dist[i]; }
+    // Distancia perceptual (Lab, ΔE76): detecta figuras pálidas sobre fondo claro (cerdo rosa, cordero…).
+    const lin = v => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+    const lab = (r, g, bl) => {
+      r = lin(r); g = lin(g); bl = lin(bl);
+      const X = (0.4124 * r + 0.3576 * g + 0.1805 * bl) / 0.95047, Y = 0.2126 * r + 0.7152 * g + 0.0722 * bl, Z = (0.0193 * r + 0.1192 * g + 0.9505 * bl) / 1.08883;
+      return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+    };
+    const L0 = lab(bg[0], bg[1], bg[2]);
+    const dist = new Float32Array(w * h); let mx = 1;
+    for (let i = 0; i < w * h; i++) {
+      const l = lab(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+      dist[i] = Math.hypot(l[0] - L0[0], (l[1] - L0[1]) * 1.3, (l[2] - L0[2]) * 1.3); if (dist[i] > mx) mx = dist[i];
+    }
+    let bgDev = 0; for (const i of ring) { const q = i / 4; bgDev += dist[q]; } bgDev /= ring.length;
+    const hist = new Float32Array(64);
     for (let i = 0; i < w * h; i++) hist[Math.min(63, (dist[i] / mx * 63) | 0)]++;
     // Otsu
     let sumAll = 0; for (let i = 0; i < 64; i++) sumAll += i * hist[i];
@@ -128,14 +165,33 @@
       sumB += i * hist[i]; const mB = sumB / wB, mF = (sumAll - sumB) / wF, v = wB * wF * (mB - mF) * (mB - mF);
       if (v > best) { best = v; thr = i; }
     }
-    const T = Math.max(28, (thr / 63) * mx);
-    const raw = new Uint8Array(w * h); for (let i = 0; i < w * h; i++) raw[i] = dist[i] > T ? 1 : 0;
-    // Apertura/cierre ligeros para limpiar ruido.
-    const mask = largest(close(raw, w, h), w, h);
-    let area = 0; for (let i = 0; i < mask.length; i++) area += mask[i];
-    const frac = area / (w * h);
+    // Umbral: Otsu moderado (para dejar fuera sombras suaves) pero nunca por debajo del ruido del fondo.
+    const T = Math.max(8, bgDev * 3 + 4, Math.min((thr / 63) * mx * 0.8, 40));
+    // Umbral → máscara; si la silueta sale diminuta (figura pálida), se repite con umbral más bajo.
+    let mask = null, frac = 0;
+    for (const m of [1, 0.7, 0.5]) {
+      const Tm = Math.max(5, T * m), raw = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) raw[i] = dist[i] > Tm ? 1 : 0;
+      mask = fillHoles(largest(close(close(raw, w, h), w, h), w, h), w, h);
+      let area = 0; for (let i = 0; i < mask.length; i++) area += mask[i];
+      frac = area / (w * h);
+      if (frac >= 0.12) break;
+    }
     if (frac < 0.03 || frac > 0.85) return null;
-    return { mask, w, h, reliability: Math.max(0.25, Math.min(1, 1 - bgDev / 60)) };
+    return { mask, w, h, reliability: Math.max(0.25, Math.min(1, 1 - bgDev / 12)) };
+  }
+
+  /** Rellena huecos interiores (todo lo que no se alcanza desde el borde). */
+  function fillHoles(m, w, h) {
+    const out = new Uint8Array(w * h).fill(1), stack = [];
+    const push = i => { if (!m[i] && out[i] === 1) { out[i] = 0; stack.push(i); } };
+    for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+    for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+    while (stack.length) {
+      const p = stack.pop(), x = p % w, y = (p / w) | 0;
+      if (x > 0) push(p - 1); if (x < w - 1) push(p + 1); if (y > 0) push(p - w); if (y < h - 1) push(p + w);
+    }
+    return out;
   }
 
   function close(m, w, h) { // dilatar 1 y erosionar 1 (cierra huecos pequeños)
@@ -161,7 +217,8 @@
       const q = describe(seg.mask, seg.w, seg.h); if (!q) continue;
       used++; rel += seg.reliability;
       for (const id of ids) {
-        let best = 0; for (const t of tpl[id]) best = Math.max(best, similarity(q, t, AR[id]));
+        let best = 0; for (const t of tpl[id]) best = Math.max(best, similarity(q, t, AR[id]) * (refs[id] ? 0.93 : 1));
+        if (refs[id]) for (const t of refs[id]) best = Math.max(best, similarity(q, t, t.ar));
         acc[id] = (acc[id] || 0) + best;
       }
     }
@@ -205,5 +262,5 @@
     return Object.assign({}, ai, { speciesId, confidence, candidates: cands, localAgrees: !!agree });
   }
 
-  root.EmojiMatch = { classify, merge, segment, describe, EMOJIS, _templates: buildTemplates };
+  root.EmojiMatch = { classify, merge, loadRefs, refCount: () => Object.keys(refs).length, segment, describe, EMOJIS, _templates: buildTemplates };
 })(typeof window !== 'undefined' ? window : globalThis);
