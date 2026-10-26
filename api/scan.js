@@ -21,20 +21,38 @@ function limited(ip) {
   return arr.length > 12;
 }
 
-const SYSTEM = `Eres el motor de reconocimiento de CritterDex. Recibes fotos de FIGURAS FLEXI: juguetes articulados impresos en 3D (cuerpo segmentado, a menudo de un solo color, bicolor o degradado). Debes decidir cuál de las especies del catálogo aparece, o ninguna.
+const SYSTEM = `Eres el motor visual de CritterDex y clasificas FOTOGRAFÍAS de figuras flexi articuladas impresas en 3D. La tarea es identificar UNA de las 15 figuras del catálogo, o rechazar la imagen si no hay suficiente evidencia.
 
-Catálogo:
-${SPECIES.map(s => `- ${s.id}: ${s.name} (${s.animal}). Rasgos: ${s.cues}.`).join('\n')}
+IMPORTANTE SOBRE LAS IMÁGENES:
+- La primera imagen que recibes es una HOJA DE REFERENCIA con las 15 figuras del catálogo, en el orden indicado abajo. No la clasifiques como si fuera la foto del usuario.
+- Las imágenes que siguen son fotografías del mismo objeto real. Compáralas con la hoja de referencia y combina la evidencia entre ángulos.
+- Las figuras pueden ser monocromáticas, tener cualquier color, estar iluminadas de otra manera, giradas, parcialmente ocultas o verse en una escala distinta. No uses el color como criterio de identidad.
+- Busca una figura física/articulada, no una foto de un animal vivo, un dibujo, un emoji, una captura de pantalla, una persona ni un objeto no relacionado.
 
-Reglas:
-1. Identifica por SILUETA y RASGOS ANATÓMICOS (hocico, orejas, cola, cuernos, extremidades), nunca por el color: el mismo modelo se imprime en cualquier color.
-2. Si hay varias fotos, son del mismo objeto; combina la evidencia.
-3. Si no hay una figura/animal claro (rostro de persona, paisaje, texto, objeto no relacionado, imagen borrosa), pon species_id = null y confidence baja.
-4. Si la figura es un animal que NO está en el catálogo, species_id = null.
-5. La confidence debe estar calibrada: >0.85 solo con rasgos distintivos claramente visibles; 0.5-0.85 con duda razonable; <0.5 si adivinas.
-6. candidates incluye hasta 3 ids del catálogo ordenados de mayor a menor confianza, aunque species_id sea null.
-7. No inventes: usa solo los ids del catálogo.
-8. La PRIMERA imagen es una hoja de referencia con las 15 figuras reales (numeradas, en el orden del catálogo). Compara la silueta, proporciones y rasgos de la foto con esas figuras. La figura de la foto puede estar impresa en OTRO color, en otro ángulo o con otra iluminación; no es una imagen de la hoja.`;
+CATÁLOGO Y RASGOS DISTINTIVOS:
+${SPECIES.map(s => `- ${s.id}: ${s.name} (${s.animal}). Rasgos: ${s.cues}.`).join('\\n')}
+
+COMPARACIONES QUE DEBES HACER:
+- anteater frente a aligator: ambos tienen cuerpo y hocico alargados; el oso hormiguero tiene hocico fino y puntiagudo, sin placas dorsales de reptil y suele tener cola voluminosa. El caimán tiene hocico ancho y plano, lomo con placas y cola gruesa de reptil.
+- capybara frente a guinea: capibara con cuerpo de barril más grande y cabeza cuadrada/roma; cuy con silueta compacta, muy redondeada, patas muy cortas y sin cola visible.
+- lamb frente a calf: cordero con lana rizada y aspecto de vellón; ternero Highland con pelo largo/desgreñado y flequillo cubriendo la frente, a veces pequeños cuernos.
+- orca frente a platypus: orca con cuerpo de cetáceo, aleta dorsal y aletas pectorales; ornitorrinco con pico plano de pato, cuatro patas y cola ancha de castor.
+- fennec frente a squirrel: fénec con hocico de zorro, patas y cuerpo cuadrúpedos y orejas enormes; ardilla con cola curvada y muy tupida que domina el contorno y postura más erguida.
+- unicorn frente a fennec: unicornio con anatomía equina, crin y UN cuerno en la frente; fénec con orejas largas, hocico de zorro y sin cuerno.
+- frog frente a pig: rana con ojos saltones y patas traseras dobladas grandes; cerdo con hocico ancho/redondeado con fosas nasales y cuerpo de mamífero compacto.
+- triceratops: exige una gola detrás del cráneo y cuernos visibles; no basta con que parezca un dinosaurio genérico.
+- bee: exige abdomen de insecto, seis patas y/o alas/antenas visibles; no clasifiques una mancha amarilla y negra como abeja sin forma de insecto.
+- calf frente a lamb: mira el contorno de la cabeza, el flequillo y la textura/patrón general del cuerpo, no el color.
+
+REGLAS DE DECISIÓN:
+1. Decide primero si la foto muestra una figura física de tipo flexi/articulada. Si no, is_figure=false, species_id=null y confianza baja. Una foto de un animal vivo o de una ilustración no es un descubrimiento del juego.
+2. Compara la foto del usuario con las figuras de referencia. Da prioridad al contorno, proporciones y rasgos anatómicos visibles. No asumas que el objeto debe tener el mismo color que la referencia.
+3. Considera el catálogo cerrado: solo los 15 IDs listados. Si la especie no está en el catálogo, no fuerces la opción más parecida.
+4. No adivines a partir de una sola pista genérica (por ejemplo, solo cuatro patas o solo una cola). Busca al menos dos o tres rasgos diagnósticos.
+5. confidence > 0.85 solo si la figura es clara y varios rasgos distintivos coinciden. Usa 0.65–0.84 si la identidad parece probable pero hay dudas de ángulo, oclusión o parecido con otra especie. Usa menos de 0.65 si faltan rasgos decisivos o solo estás adivinando.
+6. candidates debe contener hasta 3 opciones plausibles distintas, ordenadas por confianza. No rellenes candidatos con especies que no se parezcan a la foto.
+7. image_quality: elige 'borrosa', 'oscura', 'muy_lejos' o 'parcial' si perjudica la clasificación; de lo contrario, 'buena'.
+8. observed_features describe SOLO lo que realmente es visible en la fotografía, en una frase breve. Si no se distingue la figura, dilo claramente.`;
 
 const TOOL = {
   name: 'report_scan',
@@ -44,7 +62,7 @@ const TOOL = {
     required: ['observed_features', 'is_figure', 'species_id', 'confidence', 'candidates', 'image_quality'],
     properties: {
       observed_features: { type: 'string', description: 'Rasgos anatómicos visibles en 1-2 frases.' },
-      is_figure: { type: 'boolean', description: 'true si hay una figura o animal reconocible en la foto.' },
+      is_figure: { type: 'boolean', description: 'true solo si la foto muestra una figura física tipo juguete/flexi; false para animales vivos, ilustraciones, emojis, personas u objetos no relacionados.' },
       species_id: { type: ['string', 'null'], enum: [...IDS, null] },
       confidence: { type: 'number', minimum: 0, maximum: 1 },
       candidates: {
@@ -145,11 +163,24 @@ module.exports = async function handler(req, res) {
       .slice(0, 3);
     let speciesId = IDS.includes(out.species_id) ? out.species_id : null;
     let confidence = clamp(out.confidence);
-    if (!out.is_figure) { speciesId = null; confidence = Math.min(confidence, 0.2); }
+    const isFigure = out.is_figure === true;
+
+    // Normaliza respuestas inconsistentes y exige más evidencia para el descubrimiento automático.
+    if (speciesId && !candidates.some(c => c.id === speciesId)) {
+      candidates.unshift({ id: speciesId, confidence });
+      candidates.splice(3);
+    }
+    if (!isFigure) {
+      speciesId = null;
+      confidence = Math.min(confidence, 0.15);
+    } else if (speciesId && confidence < 0.72) {
+      // La especie puede permanecer como sugerencia, pero no como identificación confirmada.
+      speciesId = null;
+    }
 
     return json(res, 200, {
       ok: true, speciesId, confidence, candidates,
-      isFigure: !!out.is_figure, quality: out.image_quality, note: String(out.observed_features || '').slice(0, 240),
+      isFigure, quality: out.image_quality, note: String(out.observed_features || '').slice(0, 240),
     });
   } catch (e) {
     const timeout = e && e.name === 'AbortError';
