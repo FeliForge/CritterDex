@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0f1a">
+<title>CritterDex — Alpha</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070b14;--bg2:#0d1526;--panel:rgba(22,32,56,.72);--panel-solid:#121c30;
+  --line:rgba(120,160,220,.18);--mint:#5ef0c0;--mint-dim:#2a9d78;--coral:#ff6b8a;
+  --gold:#ffd166;--violet:#a78bfa;--sky:#6ec8ff;--text:#eef3ff;--muted:#8b9bb8;
+  --glow:0 0 40px rgba(94,240,192,.25);--radius:20px;
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;font-family:'Outfit',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+body::before,body::after{content:'';position:fixed;border-radius:50%;filter:blur(70px);pointer-events:none;z-index:0;opacity:.55}
+body::before{width:60vmax;height:60vmax;left:-20vmax;top:-25vmax;background:radial-gradient(circle,rgba(94,240,192,.22),transparent 65%);animation:drift 22s ease-in-out infinite alternate}
+body::after{width:55vmax;height:55vmax;right:-22vmax;bottom:-25vmax;background:radial-gradient(circle,rgba(167,139,250,.2),transparent 65%);animation:drift 28s ease-in-out infinite alternate-reverse}
+@keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(8vmax,6vmax) scale(1.2)}}
+button,input,select{font:inherit;border:0;outline:0}
+button{cursor:pointer;border-radius:14px;padding:12px 18px;font-weight:700;transition:transform .2s var(--spring),box-shadow .2s,background .2s,border-color .2s,color .2s;color:inherit;background:none}
+button:not(:disabled):hover{animation:wobbleS .55s ease-in-out}
+button:not(:disabled):active{animation:jelly .45s var(--spring)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+button.primary{background:linear-gradient(135deg,var(--mint),#3dd9a0);color:#062018;box-shadow:var(--glow)}
+button.primary:hover{box-shadow:0 0 50px rgba(94,240,192,.45)}
+button.ghost{background:var(--panel);color:var(--text);border:1px solid var(--line);backdrop-filter:blur(12px)}
+button.ghost:hover{border-color:var(--mint);color:var(--mint)}
+button.danger{background:linear-gradient(135deg,var(--coral),#ff8f6b);color:#2a0710}
+button:disabled{opacity:.35;cursor:not-allowed}
+.muted{color:var(--muted)}
+
+/* —— animaciones base —— */
+@keyframes wobble{0%,100%{transform:rotate(0) scale(1)}15%{transform:rotate(-9deg) scale(1.08)}30%{transform:rotate(7deg) scale(1.04)}45%{transform:rotate(-5deg)}60%{transform:rotate(3.5deg)}75%{transform:rotate(-1.5deg)}}
+@keyframes wobbleS{0%,100%{transform:rotate(0)}20%{transform:rotate(-2.5deg) scale(1.03)}45%{transform:rotate(2deg)}70%{transform:rotate(-1deg)}}
+@keyframes jelly{0%{transform:scale(1,1)}30%{transform:scale(1.2,.8)}50%{transform:scale(.88,1.14)}70%{transform:scale(1.07,.95)}100%{transform:scale(1,1)}}
+@keyframes floaty{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-8px) rotate(3deg)}}
+@keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.04,.97)}}
+@keyframes pageIn{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes cardIn{0%{opacity:0;transform:translateY(26px) scale(.9) rotate(-3deg)}60%{opacity:1;transform:translateY(-5px) scale(1.03) rotate(.8deg)}100%{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.18);opacity:1}100%{transform:scale(1)}}
+@keyframes shimmer{to{background-position:200% 0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes dots{0%,20%{content:'.'}40%{content:'..'}60%,100%{content:'...'}}
+@keyframes glowPulse{0%,100%{box-shadow:0 0 14px rgba(255,209,102,.35)}50%{box-shadow:0 0 34px rgba(255,209,102,.9)}}
+@keyframes toastIn{from{transform:translateY(24px) scale(.9);opacity:0}to{transform:none;opacity:1}}
+
+/* —— layout —— */
+.wrap{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding:20px 18px 100px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;font-size:28px;cursor:pointer;
+  background:linear-gradient(145deg,#1a2a44,#0f1a2e);border:1px solid var(--line);box-shadow:var(--glow);animation:floaty 4.2s ease-in-out infinite}
+.logo:hover{animation:wobble .8s}
+.brand h1{font-size:1.45rem;font-weight:800;letter-spacing:-.02em}
+.brand p{color:var(--muted);font-size:.85rem}
+.pill{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--mint);border:1px solid rgba(94,240,192,.35);border-radius:99px;padding:5px 11px;background:rgba(94,240,192,.08);display:inline-block}
+.nav{display:flex;gap:6px;overflow-x:auto;padding:14px 0 18px;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav button{white-space:nowrap;padding:10px 16px;font-size:.9rem;color:var(--muted);border-radius:12px;border:1px solid transparent}
+.nav button.active{background:rgba(94,240,192,.12);color:var(--mint);border-color:rgba(94,240,192,.3);animation:jelly .5s var(--spring)}
+.page:not(.hidden){animation:pageIn .5s var(--spring)}
+.page.enter .card,.page.enter .stat,.page.enter .rank-row{animation:cardIn .65s var(--spring) both;animation-delay:calc(var(--i,0)*55ms)}
+.hero{position:relative;overflow:hidden;padding:28px 26px;border-radius:var(--radius);
+  background:linear-gradient(135deg,rgba(30,48,78,.9),rgba(14,22,40,.95));border:1px solid var(--line);margin-bottom:20px}
+.hero::after{content:'';position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;
+  background:radial-gradient(circle,rgba(94,240,192,.22),transparent 70%);pointer-events:none;animation:breathe 4s ease-in-out infinite}
+.hero .tag{font-size:.72rem;font-weight:700;letter-spacing:.08em;color:var(--mint);text-transform:uppercase}
+.hero h2{font-size:clamp(1.5rem,4vw,2.2rem);font-weight:800;line-height:1.15;margin:8px 0 10px;letter-spacing:-.03em}
+.hero p{color:var(--muted);max-width:520px;font-size:.95rem;line-height:1.5}
+.hero .mascot{position:absolute;right:22px;bottom:10px;font-size:3.6rem;animation:floaty 3.6s ease-in-out infinite;cursor:pointer;z-index:1;user-select:none}
+.hero .mascot:hover{animation:wobble .8s}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.stat{background:var(--panel);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:16px;padding:16px;text-align:center}
+.stat:hover{animation:wobbleS .6s}
+.stat span{display:block;font-size:.75rem;color:var(--muted);margin-bottom:4px}
+.stat strong{font-size:1.5rem;font-weight:800;background:linear-gradient(90deg,var(--mint),var(--violet));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
+.stat strong.tick{animation:jelly .5s var(--spring)}
+.section{margin-top:8px}
+.section h2{font-size:1.15rem;font-weight:700;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+
+/* —— tarjetas —— */
+.card{position:relative;background:var(--panel);backdrop-filter:blur(16px);border:1px solid var(--line);border-radius:18px;padding:16px;
+  display:flex;flex-direction:column;gap:10px;transition:border-color .25s,transform .3s var(--spring),box-shadow .3s;color:var(--text);text-align:left}
+.card:hover{border-color:rgba(94,240,192,.4);transform:translateY(-4px) rotate(-.6deg);box-shadow:0 14px 30px rgba(0,0,0,.35)}
+.card.locked{opacity:.6}
+.card .emoji{font-size:3.2rem;text-align:center;padding:18px;border-radius:14px;background:linear-gradient(160deg,#1a2a44,#121c30);border:1px solid var(--line);position:relative;overflow:hidden}
+.card .emoji i{display:inline-block;font-style:normal;animation:floaty 3.6s ease-in-out infinite;animation-delay:calc(var(--i,0)*-.4s)}
+.card.locked .emoji i{animation:none;filter:grayscale(1) brightness(.6)}
+.card.locked:hover .emoji i{animation:wobble .7s}
+.card:not(.locked):hover .emoji i{animation:wobble .7s}
+.card h3{font-size:1.05rem;font-weight:700}
+.card .meta{font-size:.78rem;color:var(--mint);font-weight:600}
+.card .desc{font-size:.82rem;color:var(--muted);line-height:1.4;flex:1}
+.card.r-Rara .emoji{box-shadow:inset 0 0 22px rgba(94,240,192,.18)}
+.card.r-Épica{border-color:rgba(167,139,250,.4)}
+.card.r-Épica .emoji{box-shadow:inset 0 0 26px rgba(167,139,250,.28)}
+.card.r-Legendaria{border:1px solid transparent;background:
+  linear-gradient(var(--panel-solid),var(--panel-solid)) padding-box,
+  linear-gradient(110deg,#ffd166,#ff6b8a,#a78bfa,#6ec8ff,#5ef0c0,#ffd166) border-box;background-size:100% 100%,300% 100%;animation:shimmer 6s linear infinite}
+.card.r-Legendaria .emoji{box-shadow:inset 0 0 30px rgba(255,209,102,.3)}
+.card.r-Legendaria .emoji::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);background-size:250% 100%;animation:shimmer 3.2s linear infinite}
+.card.bump{animation:jelly .55s var(--spring)}
+.card.levelup{animation:glowPulse 1s ease-in-out 2}
+.bar{height:6px;background:#1e2a40;border-radius:99px;overflow:hidden;margin-top:4px}
+.bar span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--mint),var(--violet));transition:width .7s var(--spring);background-size:200% 100%;animation:shimmer 3s linear infinite}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
+.actions button{padding:8px 12px;font-size:.8rem;border-radius:10px;flex:1}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.toolbar input,.toolbar select,input[type=text],.field{flex:1;min-width:120px;background:var(--panel-solid);color:var(--text);
+  border:1px solid var(--line);padding:12px 14px;border-radius:12px;transition:border-color .2s,box-shadow .2s}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--mint);box-shadow:0 0 0 3px rgba(94,240,192,.15)}
+
+/* —— escáner —— */
+.scan-stage{border:1px dashed rgba(94,240,192,.3);border-radius:var(--radius);padding:24px;text-align:center;
+  background:rgba(10,16,28,.6);position:relative;overflow:hidden}
+.viewfinder{position:relative;display:grid;place-items:center;max-width:100%;min-width:min(340px,100%);min-height:210px;margin:12px auto;border-radius:14px;background:rgba(255,255,255,.025)}
+.viewfinder::before{content:'📷';position:absolute;font-size:3.4rem;opacity:.35;animation:floaty 3.4s ease-in-out infinite;pointer-events:none}
+.viewfinder:has(video:not(.hidden))::before,.viewfinder:has(img:not(.hidden))::before{display:none}
+.viewfinder video,.viewfinder img{max-width:100%;max-height:300px;border-radius:14px;display:block}
+.viewfinder .corner{position:absolute;width:26px;height:26px;border:3px solid var(--mint);filter:drop-shadow(0 0 6px var(--mint));animation:breathe 2s ease-in-out infinite;pointer-events:none}
+.corner.tl{left:-6px;top:-6px;border-right:0;border-bottom:0;border-top-left-radius:12px}
+.corner.tr{right:-6px;top:-6px;border-left:0;border-bottom:0;border-top-right-radius:12px}
+.corner.bl{left:-6px;bottom:-6px;border-right:0;border-top:0;border-bottom-left-radius:12px}
+.corner.br{right:-6px;bottom:-6px;border-left:0;border-top:0;border-bottom-right-radius:12px}
+.viewfinder .laser{position:absolute;left:0;right:0;height:3px;top:10%;background:linear-gradient(90deg,transparent,var(--mint),transparent);box-shadow:0 0 18px var(--mint);opacity:0;border-radius:3px}
+.scan-stage.scanning .laser{opacity:1;animation:scanline 1.3s ease-in-out infinite}
+.scan-stage.scanning .viewfinder img{animation:breathe 1.4s ease-in-out infinite;filter:saturate(1.2) brightness(1.05)}
+.scan-stage.scanning .viewfinder::after{content:'';position:absolute;inset:0;border-radius:14px;background:repeating-linear-gradient(0deg,rgba(94,240,192,.08) 0 2px,transparent 2px 6px);pointer-events:none}
+@keyframes scanline{0%{top:6%}50%{top:92%}100%{top:6%}}
+.model-badge{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;font-weight:700;color:var(--violet);
+  background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.3);border-radius:99px;padding:4px 10px;margin-bottom:10px}
+#cameraStatus{margin:10px 0;min-height:1.4em}
+#cameraStatus.working::after{content:'';display:inline-block;width:1.2em;text-align:left;animation:dots 1.2s steps(1) infinite}
+#cameraStatus.working::after{content:'...'}
+.cand{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;text-align:left;padding:10px 12px;border-radius:14px;
+  background:var(--panel-solid);border:1px solid var(--line);margin:8px auto;max-width:460px;animation:cardIn .55s var(--spring) both;animation-delay:calc(var(--i,0)*90ms);width:100%;color:var(--text)}
+.cand.main{border-color:rgba(94,240,192,.55);box-shadow:var(--glow)}
+.cand .e{font-size:1.8rem;animation:floaty 3s ease-in-out infinite}
+.cand .bar{margin-top:6px}
+.cand .bar span{transition:width 1s var(--spring)}
+.cand strong{font-size:.95rem}
+.cand small{color:var(--muted)}
+.scan-tips{max-width:460px;margin:10px auto 0;color:var(--muted);font-size:.85rem;line-height:1.5;text-align:left}
+
+/* —— ranking —— */
+.rank-list{display:flex;flex-direction:column;gap:0}
+.rank-row{display:flex;align-items:center;gap:14px;padding:14px 12px;border-bottom:1px solid var(--line)}
+.rank-row:last-child{border:0}
+.rank-row.you{background:rgba(94,240,192,.06);border-radius:12px;border:1px solid rgba(94,240,192,.2)}
+.rank-num{width:36px;font-size:1.2rem;font-weight:800;color:var(--mint);text-align:center;display:inline-block}
+.rank-num.gold{color:var(--gold);animation:floaty 2.6s ease-in-out infinite}.rank-num.silver{color:#c0c8d8}.rank-num.bronze{color:#cd7f32}
+.rank-row:hover .rank-num{animation:wobble .6s}
+
+/* —— combate: lobby —— */
+.server-card{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;flex-wrap:wrap;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.server-card .code{font-size:2rem;font-weight:800;letter-spacing:.25em;color:var(--mint);display:inline-block;animation:pop .5s var(--spring)}
+.server-card span.st{display:block;font-size:.85rem;color:var(--muted)}
+.server-card span.st.live::before{content:'';display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mint);margin-right:8px;animation:breathe 1s ease-in-out infinite;box-shadow:0 0 10px var(--mint)}
+.hint{font-size:.8rem;color:var(--muted);margin-top:8px;line-height:1.45}
+
+/* —— combate: arena —— */
+.stage{position:relative;border-radius:var(--radius);border:1px solid var(--line);overflow:hidden;min-height:340px;margin-bottom:14px;
+  background:radial-gradient(ellipse 70% 60% at 50% 110%,rgba(94,240,192,.18),transparent 70%),radial-gradient(ellipse 60% 50% at 50% 0%,rgba(167,139,250,.16),transparent 70%),linear-gradient(180deg,#0e1a31,#0a1222);
+  display:grid;grid-template-columns:1fr 1fr;align-items:end;padding:56px 14px 22px;gap:8px}
+.stage::before{content:'';position:absolute;left:-10%;right:-10%;bottom:0;height:34%;background:repeating-linear-gradient(90deg,rgba(94,240,192,.07) 0 2px,transparent 2px 60px),linear-gradient(180deg,transparent,rgba(94,240,192,.12));transform:perspective(300px) rotateX(55deg);transform-origin:bottom;pointer-events:none}
+.stage .banner{position:absolute;left:0;right:0;top:12px;text-align:center;font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:.85rem;color:var(--muted);z-index:3;pointer-events:none}
+.stage .banner b{display:inline-block;color:var(--gold)}
+.stage .banner.pop b{animation:pop .5s var(--spring)}
+.stage .big{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(2.4rem,9vw,4.4rem);font-weight:800;pointer-events:none;z-index:6;text-shadow:0 0 30px rgba(0,0,0,.6);letter-spacing:-.02em}
+.stage .big span{display:inline-block}
+.fbox{position:relative;text-align:center;z-index:2;display:flex;flex-direction:column;align-items:center;gap:6px}
+.fbox .name{font-weight:800;font-size:.95rem}
+.fbox .name small{display:block;color:var(--muted);font-weight:600;font-size:.72rem}
+.spriteWrap{display:inline-block;position:relative;will-change:transform}
+.sprite{font-size:clamp(3.6rem,15vw,6.8rem);line-height:1.05;display:inline-block;animation:breathe 2.2s ease-in-out infinite;filter:drop-shadow(0 14px 12px rgba(0,0,0,.5));user-select:none}
+.fbox.right .sprite{transform:scaleX(-1)}
+.fbox.right .sprite{animation:breatheFlip 2.2s ease-in-out infinite}
+@keyframes breatheFlip{0%,100%{transform:scaleX(-1) scale(1,1)}50%{transform:scaleX(-1) scale(1.04,.97)}}
+.shield{position:absolute;inset:-14%;border-radius:50%;border:3px solid rgba(110,200,255,.9);background:radial-gradient(circle,rgba(110,200,255,.05),rgba(110,200,255,.35));box-shadow:0 0 30px rgba(110,200,255,.7),inset 0 0 30px rgba(110,200,255,.5);opacity:0;transform:scale(.4);pointer-events:none}
+.shield.on{opacity:1;transform:scale(1);transition:opacity .2s,transform .35s var(--spring)}
+.bars{width:100%;max-width:230px;display:grid;gap:5px}
+.hpbar{position:relative;height:12px;border-radius:99px;background:#1b2740;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.hpbar .ghost{position:absolute;left:0;top:0;bottom:0;background:#fff;opacity:.85;transition:width .6s .35s ease-out}
+.hpbar .real{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg,var(--mint),#9af06e);transition:width .25s ease-out,background .3s}
+.hpbar.mid .real{background:linear-gradient(90deg,var(--gold),#ffb347)}
+.hpbar.low .real{background:linear-gradient(90deg,var(--coral),#ff4d6d);animation:breathe .7s ease-in-out infinite}
+.hpnum{font-size:.72rem;color:var(--muted);font-weight:700;margin-top:-2px}
+.mtbar{height:7px;border-radius:99px;background:#1b2740;overflow:hidden}
+.mtbar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--violet),var(--sky));transition:width .4s var(--spring)}
+.mtbar.full span{background:linear-gradient(90deg,var(--gold),var(--coral),var(--gold));background-size:200% 100%;animation:shimmer 1s linear infinite}
+.floaters{position:absolute;inset:0;pointer-events:none;z-index:7;overflow:hidden}
+.dmg{position:absolute;font-weight:800;font-size:1.9rem;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.5),0 0 14px rgba(255,107,138,.9);transform:translate(-50%,-50%);animation:dmgFloat .95s cubic-bezier(.2,.8,.3,1) forwards;white-space:nowrap}
+.dmg.crit{font-size:2.8rem;color:var(--gold);text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 22px rgba(255,209,102,1)}
+.dmg.spc{font-size:3.1rem;color:#ffb4c6;text-shadow:0 2px 0 rgba(0,0,0,.6),0 0 26px rgba(255,107,138,1)}
+.dmg.block{color:#9fd6ff;text-shadow:0 2px 0 rgba(0,0,0,.5),0 0 14px rgba(110,200,255,.9)}
+.dmg.txt{font-size:1.05rem;letter-spacing:.1em;text-transform:uppercase}
+@keyframes dmgFloat{0%{opacity:0;transform:translate(-50%,-20%) scale(.3)}18%{opacity:1;transform:translate(-50%,-70%) scale(1.35)}35%{transform:translate(-50%,-90%) scale(1)}100%{opacity:0;transform:translate(-50%,-190%) scale(.9)}}
+.flash{position:absolute;inset:0;z-index:5;pointer-events:none;opacity:0;background:#fff}
+.timerbar{height:5px;border-radius:99px;background:#1b2740;overflow:hidden;margin:0 0 12px}
+.timerbar span{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--mint),var(--gold),var(--coral));transform-origin:left}
+.moves{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.mv{position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;gap:2px;padding:14px 8px;border-radius:16px;background:var(--panel);border:1px solid var(--line);color:var(--text)}
+.mv .ic{font-size:1.9rem;display:inline-block;transition:transform .3s var(--spring)}
+.mv:not(:disabled):hover .ic{transform:scale(1.25) rotate(-8deg)}
+.mv b{font-size:.95rem}
+.mv small{font-size:.7rem;color:var(--muted);font-weight:600}
+.mv.atk{border-color:rgba(255,107,138,.4)}
+.mv.def{border-color:rgba(110,200,255,.4)}
+.mv.spc{border-color:rgba(167,139,250,.4)}
+.mv.picked{background:rgba(94,240,192,.14);border-color:var(--mint);animation:jelly .45s var(--spring)}
+.mv.spc .fill{position:absolute;left:0;bottom:0;height:4px;background:linear-gradient(90deg,var(--violet),var(--sky));width:var(--m,0%);transition:width .4s}
+.mv.spc.ready:not(:disabled){background:linear-gradient(135deg,rgba(255,209,102,.25),rgba(255,107,138,.25));border-color:var(--gold);animation:glowPulse 1s ease-in-out infinite}
+.mv.spc.ready .ic{animation:wobble 1.1s ease-in-out infinite}
+.mv:disabled{opacity:.45}
+.battle-tools{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.tog{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;font-size:.82rem;font-weight:700;background:var(--panel);border:1px solid var(--line);color:var(--muted)}
+.tog.on{color:var(--mint);border-color:rgba(94,240,192,.5);background:rgba(94,240,192,.1)}
+.log{background:var(--panel-solid);border:1px solid var(--line);border-radius:14px;padding:12px 14px;max-height:130px;overflow-y:auto;font-size:.84rem;color:var(--muted);line-height:1.6}
+.log div{animation:pageIn .3s ease-out}
+.log b{color:var(--mint)}
+.endbox{position:fixed;inset:0;z-index:60;display:grid;place-items:center;background:rgba(5,8,16,.78);backdrop-filter:blur(8px);padding:18px}
+.endcard{width:min(420px,100%);text-align:center;border-radius:26px;padding:30px 24px;background:linear-gradient(160deg,#16243f,#0d1628);border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.6);animation:pop .55s var(--spring)}
+.endcard .trophy{font-size:4.6rem;display:inline-block;animation:floaty 2.4s ease-in-out infinite}
+.endcard h2{font-size:2rem;font-weight:800;margin:6px 0 4px}
+.endcard.win h2{background:linear-gradient(90deg,var(--gold),var(--mint));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.endcard.lose h2{color:var(--coral)}
+.endcard .rw{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:14px 0 18px}
+.endcard .rw span{padding:6px 12px;border-radius:99px;background:rgba(255,255,255,.07);font-weight:700;font-size:.85rem;animation:pop .5s var(--spring) both;animation-delay:calc(var(--i,0)*140ms + .3s)}
+.endcard .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+/* —— revelación de especie —— */
+.reveal{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:radial-gradient(circle at 50% 45%,rgba(94,240,192,.22),rgba(4,7,14,.92) 62%);backdrop-filter:blur(6px);padding:18px}
+.flip{width:min(300px,86vw);perspective:900px}
+.flip .inner{position:relative;width:100%;aspect-ratio:3/4;transform-style:preserve-3d;transition:transform .9s var(--spring)}
+.flip.go .inner{transform:rotateY(180deg)}
+.flip .face{position:absolute;inset:0;backface-visibility:hidden;border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px;text-align:center}
+.flip .front{background:linear-gradient(160deg,#1c2e50,#101a2f);border:2px solid var(--mint);font-size:5rem;animation:wobble 1.1s ease-in-out infinite;box-shadow:0 0 60px rgba(94,240,192,.45)}
+.flip .back{transform:rotateY(180deg);background:linear-gradient(160deg,#1b2b4a,#0e1729);border:2px solid var(--line)}
+.flip .back .bigE{font-size:5.4rem;animation:floaty 2.6s ease-in-out infinite;filter:drop-shadow(0 12px 12px rgba(0,0,0,.5))}
+.flip .back h3{font-size:1.4rem;font-weight:800}
+.flip .back p{font-size:.85rem;color:var(--muted);line-height:1.4}
+.flip.r-Rara .back{border-color:var(--mint);box-shadow:0 0 50px rgba(94,240,192,.45)}
+.flip.r-Épica .back{border-color:var(--violet);box-shadow:0 0 60px rgba(167,139,250,.6)}
+.flip.r-Legendaria .back{border-color:var(--gold);box-shadow:0 0 80px rgba(255,209,102,.8)}
+.reveal .after{margin-top:18px;text-align:center;opacity:0;transition:opacity .4s}
+.reveal .after.show{opacity:1}
+
+/* —— varios —— */
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:90}
+.toasts{position:fixed;left:0;right:0;bottom:18px;display:flex;flex-direction:column;align-items:center;gap:8px;z-index:100;pointer-events:none;padding:0 14px}
+.toast{background:rgba(18,28,48,.96);border:1px solid var(--line);border-radius:14px;padding:11px 16px;font-weight:600;font-size:.9rem;box-shadow:0 10px 30px rgba(0,0,0,.45);animation:toastIn .45s var(--spring);max-width:min(440px,100%)}
+.toast.ok{border-color:rgba(94,240,192,.5)}.toast.warn{border-color:rgba(255,209,102,.55)}.toast.err{border-color:rgba(255,107,138,.6)}
+.bgcrit{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.bgcrit i{position:absolute;bottom:-60px;font-style:normal;opacity:0;animation:rise linear infinite}
+@keyframes rise{0%{transform:translateY(0) rotate(0);opacity:0}10%{opacity:.1}90%{opacity:.07}100%{transform:translateY(-110vh) rotate(25deg);opacity:0}}
+.hidden{display:none!important}
+footer{text-align:center;padding:28px 0 10px;color:var(--muted);font-size:.78rem}
+@media(max-width:640px){
+  .stats{grid-template-columns:1fr 1fr}
+  .stats .stat:last-child{grid-column:span 2}
+  .hero .mascot{font-size:2.6rem;right:14px}
+  .stage{padding:52px 6px 18px;min-height:300px}
+  .moves{gap:7px}
+  .mv{padding:12px 4px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  .bgcrit{display:none}
+}
+</style>
+</head>
+<body>
+<div class="bgcrit" id="bgcrit" aria-hidden="true"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<main class="wrap">
+<header class="top">
+  <div class="brand">
+    <div class="logo" id="logo" title="¡Hola!">🪲</div>
+    <div>
+      <h1>CritterDex <span class="pill">Alpha 0.3</span></h1>
+      <p>Descubre · Entrena · Combate</p>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+  <div class="pill" id="savePill">Local · auto</div>
+  <select id="langSelect" onchange="setLang(this.value)" aria-label="Idioma" style="background:var(--panel-solid);color:var(--text);border:1px solid var(--line);border-radius:99px;padding:6px 10px;font-size:.75rem;cursor:pointer">
+    <option value="pt">🇧🇷 PT</option>
+    <option value="es">🇪🇸 ES</option>
+    <option value="en">🇺🇸 EN</option>
+    <option value="fr">🇫🇷 FR</option>
+    <option value="de">🇩🇪 DE</option>
+    <option value="it">🇮🇹 IT</option>
+    <option value="ja">🇯🇵 JA</option>
+  </select>
+</div>
+</header>
+
+<nav class="nav" aria-label="Navegación">
+  <button class="active" data-tab="habitat">🏡 Hábitat</button>
+  <button data-tab="dex">📚 Dex</button>
+  <button data-tab="scan">📷 Escáner IA</button>
+  <button data-tab="battle">⚔️ Combate</button>
+  <button data-tab="rank">🏆 Ranking</button>
+</nav>
+
+<!-- HÁBITAT -->
+<section id="habitat" class="page">
+  <div class="hero">
+    <span class="tag">Tu mundo</span>
+    <h2><span data-i18n="createWorld">Crie sua coleção de criaturas</span></h2>
+    <p>Descubre especies solo con el escáner IA, entrénalas y lucha contra amigos desde otro dispositivo.</p>
+    <button class="primary" style="margin-top:14px" onclick="switchTab('scan')"><span data-i18n="openScan">Abrir escâner →</span></button>
+    <div class="mascot" id="mascot" title="Boop">🦊</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span><span data-i18n="found">Descobertas</span></span><strong id="statFound">0 / 15</strong></div>
+    <div class="stat"><span><span data-i18n="maxLevel">Nível máx.</span></span><strong id="statLevel">1</strong></div>
+    <div class="stat"><span><span data-i18n="points">Pontos</span></span><strong id="statPoints">0</strong></div>
+  </div>
+  <div class="section">
+    <h2><span data-i18n="myCreatures">Minhas criaturas</span></h2>
+    <div id="myCreatures" class="grid"></div>
+  </div>
+</section>
+
+<!-- DEX -->
+<section id="dex" class="page hidden">
+  <div class="hero">
+    <span class="tag">Enciclopedia</span>
+    <h2>Todas las especies</h2>
+    <p>Consulta datos. Para registrar una especie debes usar el <strong>Escáner IA</strong>.</p>
+  </div>
+  <div class="toolbar">
+    <input id="search" placeholder="Buscar…" autocomplete="off">
+    <select id="rarity">
+      <option value="">Todas</option>
+      <option>Común</option><option>Rara</option><option>Épica</option><option>Legendaria</option>
+    </select>
+  </div>
+  <div id="dexGrid" class="grid"></div>
+</section>
+
+<!-- ESCÁNER IA -->
+<section id="scan" class="page hidden">
+  <div class="hero">
+    <span class="tag">Modelo de visión</span>
+    <h2>Escáner de especies</h2>
+    <p>Apunta a una figura Flexi o sube una foto. El modelo reconoce la especie por su silueta y rasgos, no por el color. Sin figura reconocible no hay descubrimiento.</p>
+  </div>
+  <div class="scan-stage" id="scanStage">
+    <div class="model-badge">🧠 CritterNet · visión por IA</div>
+    <div class="viewfinder" id="viewfinder">
+      <video id="video" autoplay playsinline muted class="hidden"></video>
+      <img id="preview" class="hidden" alt="Vista previa de la captura">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="laser"></div>
+    </div>
+    <p id="cameraStatus" class="muted">Activa la cámara o elige una imagen para analizar.</p>
+    <div class="toolbar" style="justify-content:center">
+      <button class="primary" id="startCamera">Abrir cámara</button>
+      <button class="ghost hidden" id="capture">Capturar</button>
+      <label class="ghost" style="padding:12px 18px;border-radius:14px;cursor:pointer;font-weight:700">Subir imagen
+        <input id="upload" type="file" accept="image/*" hidden>
+      </label>
+    </div>
+    <div id="modelResult" class="hidden" style="margin-top:12px"></div>
+    <div class="scan-tips">💡 Para acertar más: figura completa y de perfil, fondo liso, buena luz y a unos 30 cm.</div>
+  </div>
+</section>
+
+<!-- COMBATE -->
+<section id="battle" class="page hidden">
+  <div class="hero">
+    <span class="tag">Multijugador</span>
+    <h2>Arena de combate</h2>
+    <p>Crea una sala y pásale el código (o el enlace) a tu rival: funciona entre dispositivos distintos. Turnos simultáneos, medidor de especial y combates de ~5 rondas.</p>
+  </div>
+  <div class="toolbar">
+    <input id="playerName" placeholder="Tu nombre" maxlength="16">
+    <button class="primary" id="createServer">Crear sala</button>
+    <input id="joinCode" placeholder="Código" maxlength="4" style="text-transform:uppercase;max-width:110px;letter-spacing:.2em;text-align:center" autocomplete="off">
+    <button class="ghost" id="joinServer">Unirse</button>
+    <button class="ghost" id="botBtn">🤖 Contra bot</button>
+  </div>
+  <div id="serverInfo" class="hidden" style="margin-bottom:16px">
+    <div class="server-card">
+      <div>
+        <strong class="code" id="srvCode">----</strong>
+        <span class="st" id="srvStatus">…</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="ghost" id="copyLink">🔗 Copiar enlace</button>
+        <button class="ghost" id="leaveServer">Salir</button>
+      </div>
+    </div>
+    <p class="hint" id="netHint">Ambos deben tener la página abierta. Si están en redes móviles distintas, la conexión directa puede fallar: prueben con Wi-Fi.</p>
+  </div>
+  <div id="pickFighter" class="hidden" style="margin-bottom:16px">
+    <h2 style="margin-bottom:10px;font-size:1.15rem">Elige tu luchador</h2>
+    <div id="fighterPick" class="grid"></div>
+  </div>
+  <div id="arena" class="hidden">
+    <div class="stage" id="stage">
+      <div class="banner" id="banner"></div>
+      <div class="fbox left" id="boxMe">
+        <div class="name"><span id="meName">Tú</span><small id="meSub"></small></div>
+        <div class="spriteWrap" id="wrapMe"><div class="shield" id="shMe"></div><div class="sprite" id="meEmoji">❓</div></div>
+        <div class="bars">
+          <div class="hpbar" id="meHpBar"><div class="ghost" id="meGhost" style="width:100%"></div><div class="real" id="meHp" style="width:100%"></div></div>
+          <div class="hpnum" id="meHpNum"></div>
+          <div class="mtbar" id="meMt"><span></span></div>
+        </div>
+      </div>
+      <div class="fbox right" id="boxFoe">
+        <div class="name"><span id="foeName">Rival</span><small id="foeSub"></small></div>
+        <div class="spriteWrap" id="wrapFoe"><div class="shield" id="shFoe"></div><div class="sprite" id="foeEmoji">❓</div></div>
+        <div class="bars">
+          <div class="hpbar" id="foeHpBar"><div class="ghost" id="foeGhost" style="width:100%"></div><div class="real" id="foeHp" style="width:100%"></div></div>
+          <div class="hpnum" id="foeHpNum"></div>
+          <div class="mtbar" id="foeMt"><span></span></div>
+        </div>
+      </div>
+      <div class="floaters" id="floaters"></div>
+      <div class="flash" id="flash"></div>
+      <div class="big" id="bigText"></div>
+    </div>
+    <div class="timerbar"><span id="timerFill"></span></div>
+    <div class="moves">
+      <button class="mv atk" id="atkBtn"><span class="ic">⚔️</span><b>Atacar</b><small>Daño fiable · +carga</small></button>
+      <button class="mv def" id="defBtn"><span class="ic">🛡️</span><b>Defender</b><small>Reduce daño · +carga</small></button>
+      <button class="mv spc" id="spcBtn"><span class="ic">✨</span><b>Especial</b><small id="spcSub">Carga al 100%</small><i class="fill"></i></button>
+    </div>
+    <div class="battle-tools">
+      <button class="tog" id="autoBtn" aria-pressed="false">🤖 Auto: no</button>
+      <button class="tog" id="turboBtn" aria-pressed="false">⏩ Turbo: no</button>
+      <span class="muted" style="font-size:.78rem">Ambos eligen a la vez; gana quien llegue a 0 PS al otro.</span>
+    </div>
+    <div class="log" id="battleLog"></div>
+  </div>
+</section>
+
+<!-- RANKING -->
+<section id="rank" class="page hidden">
+  <div class="hero">
+    <span class="tag">Clasificación</span>
+    <h2>Ranking de exploradores</h2>
+    <p>Puntos por descubrimientos, entrenamientos y victorias. Se sincroniza entre pestañas del mismo navegador.</p>
+  </div>
+  <div class="toolbar">
+    <input id="rankName" placeholder="Cambiar tu nombre" maxlength="16">
+    <button class="ghost" id="saveName">Guardar nombre</button>
+  </div>
+  <div class="section">
+    <div id="leaderboard" class="rank-list"></div>
+  </div>
+</section>
+
+<footer>CritterDex Alpha 0.3 · descubrimiento solo por modelo · combates entre dispositivos</footer>
+</main>
+
+<div id="overlayHost"></div>
+
+<script async src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="engine.js"></script>
+<script src="emojimatch.js"></script>
+<script src="app.js"></script>
+<script>document.addEventListener("DOMContentLoaded",()=>{try{applyI18n();}catch(e){}});</script>
+</body>
+</html>
