@@ -398,6 +398,7 @@ function showReveal(sp, isNew) {
 
 /* ───────────── Escáner IA ───────────── */
 let stream = null, lastShots = null, scanBusy = false, statusTimer = 0;
+let angleShots = []; // Uma imagem de cada ângulo, não três fotogramas quase idênticos.
 const video = $('video'), preview = $('preview'), stage = $('scanStage');
 
 function setScanStatus(text, working) {
@@ -409,13 +410,15 @@ $('startCamera').onclick = async () => {
   if (scanBusy) return;
   try {
     stopCamera();
+    angleShots = [];
+    $('capture').textContent = 'Capturar ângulo 1/3';
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
     video.srcObject = stream; video.classList.remove('hidden'); preview.classList.add('hidden');
     $('capture').classList.remove('hidden'); $('modelResult').classList.add('hidden');
-    setScanStatus('Cámara lista. Encuadra la figura completa y mantén firme.');
+    setScanStatus('Câmera pronta. Enquadre a figura inteira; vamos analisar três ângulos.');
   } catch {
-    setScanStatus('Sin acceso a la cámara. Puedes subir una imagen.');
-    toast('No se pudo abrir la cámara.', 'warn');
+    setScanStatus('Sem acesso à câmera. Você pode enviar uma imagem.');
+    toast('Não foi possível abrir a câmera.', 'warn');
   }
 };
 
@@ -456,24 +459,48 @@ async function fileToCanvas(file) {
 $('capture').onclick = async () => {
   if (scanBusy || !stream || !video.videoWidth) return;
   scanBusy = true;
-  setScanStatus('Mantén firme…', true);
-  // Ráfaga de 3 fotogramas: nos quedamos con los más nítidos.
-  const shots = [];
+  const angleNumber = angleShots.length + 1;
+  setScanStatus(`Capturando ângulo ${angleNumber} de 3… mantenha a figura inteira no quadro.`, true);
+
+  // Em cada ângulo, escolhemos o fotograma mais nítido de uma pequena sequência.
+  const burst = [];
   for (let i = 0; i < 3; i++) {
-    const c = drawScaled(video); shots.push({ c, q: imageQuality(c) });
-    if (i === 0) $('viewfinder').animate([{ filter: 'brightness(2.4)' }, { filter: 'brightness(1)' }], { duration: 380 });
-    if (i < 2) await sleep(190);
+    const c = drawScaled(video);
+    burst.push({ c, q: imageQuality(c) });
+    if (i === 0 && $('viewfinder').animate) {
+      $('viewfinder').animate([{ filter: 'brightness(1.8)' }, { filter: 'brightness(1)' }], { duration: 220 });
+    }
+    if (i < 2) await sleep(120);
   }
-  shots.sort((a, b) => b.q.sharp - a.q.sharp);
-  preview.src = shots[0].c.toDataURL('image/jpeg', .85);
-  preview.classList.remove('hidden'); video.classList.add('hidden'); $('capture').classList.add('hidden');
+  burst.sort((a, b) => b.q.sharp - a.q.sharp);
+  angleShots.push(burst[0]);
+
+  if (angleShots.length < 3) {
+    scanBusy = false;
+    const next = angleShots.length + 1;
+    $('capture').textContent = `Capturar ângulo ${next}/3`;
+    setScanStatus(`Ângulo ${angleShots.length}/3 salvo. Gire a figura para mostrar outro lado e capture novamente.`);
+    return;
+  }
+
+  const shots = angleShots.slice().sort((a, b) => b.q.sharp - a.q.sharp);
+  angleShots = [];
+  const q = {
+    sharp: shots.reduce((sum, s) => sum + s.q.sharp, 0) / shots.length,
+    mean: shots.reduce((sum, s) => sum + s.q.mean, 0) / shots.length,
+  };
+  preview.src = shots[0].c.toDataURL('image/jpeg', .88);
+  preview.classList.remove('hidden');
+  video.classList.add('hidden');
+  $('capture').classList.add('hidden');
   stopCamera();
   scanBusy = false;
-  await runScan(shots.slice(0, 2).map(s => s.c), shots[0].q);
+  await runScan(shots.map(s => s.c), q);
 };
 
 $('upload').onchange = async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f || scanBusy) return;
+  angleShots = [];
   scanBusy = true; setScanStatus('Preparando imagen…', true);
   try {
     const c = await fileToCanvas(f);
