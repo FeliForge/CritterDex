@@ -233,7 +233,11 @@
 
   /** Mezcla IA + local. ai: respuesta de /api/scan (o {ok:false}); local: salida de classify. */
   function merge(ai, local) {
-    const L = local && local.ok ? local.ranking.slice(0, 5) : [];
+    const rawLocal = local && local.ok && Array.isArray(local.ranking) ? local.ranking : [];
+    // La softmax solo ordena opciones: no prueba que la silueta coincida de verdad.
+    // Solo permitimos que el análisis local influya si su mejor semejanza absoluta es razonable.
+    const localPeak = rawLocal.length ? Number(rawLocal[0].score) || 0 : 0;
+    const L = localPeak >= 0.30 ? rawLocal.slice(0, 5) : [];
     if (!ai || !ai.ok) {
       if (!L.length) return ai;
       const cands = L.slice(0, 3).map(s => ({ id: s.id, confidence: s.confidence }));
