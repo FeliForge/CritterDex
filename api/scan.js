@@ -30,7 +30,7 @@ IMPORTANTE SOBRE LAS IMÁGENES:
 - Busca una figura física/articulada, no una foto de un animal vivo, un dibujo, un emoji, una captura de pantalla, una persona ni un objeto no relacionado.
 
 CATÁLOGO Y RASGOS DISTINTIVOS:
-${SPECIES.map(s => `- ${s.id}: ${s.name} (${s.animal}). Rasgos: ${s.cues}.`).join('\\n')}
+${SPECIES.map(s => `- ${s.id}: ${s.name} (${s.animal}). Rasgos: ${s.cues}.`).join('\n')}
 
 COMPARACIONES QUE DEBES HACER:
 - anteater frente a aligator: ambos tienen cuerpo y hocico alargados; el oso hormiguero tiene hocico fino y puntiagudo, sin placas dorsales de reptil y suele tener cola voluminosa. El caimán tiene hocico ancho y plano, lomo con placas y cola gruesa de reptil.
