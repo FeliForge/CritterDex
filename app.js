@@ -353,7 +353,12 @@ async function runScan(canvases, q) {
   clearInterval(statusTimer);
   statusTimer = setInterval(() => { step = Math.min(step + 1, SCAN_STEPS.length - 1); setScanStatus(SCAN_STEPS[step], true); }, 1100);
   const minWait = sleep(1400); // que la animación se vea aunque responda rápido
-  const res = await callScan(canvases);
+  const [aiRes] = await Promise.all([callScan(canvases), sleep(0)]);
+  let res = aiRes;
+  try { // silueta local (emojis): complementa a la IA o la sustituye si falla
+    const local = window.EmojiMatch ? window.EmojiMatch.classify(canvases) : null;
+    res = window.EmojiMatch ? window.EmojiMatch.merge(aiRes, local) : aiRes;
+  } catch (e) { console.warn('emojimatch', e); }
   await minWait;
   clearInterval(statusTimer); stage.classList.remove('scanning'); scanBusy = false;
   showScanResult(res, q);
@@ -387,9 +392,10 @@ function showScanResult(res, q) {
     return;
   }
   const hints = qualityHints(res, q);
-  const cands = (res.candidates || []).filter(c => bySpecies(c.id) && c.confidence >= .15);
+  const cands = (res.candidates || []).filter(c => bySpecies(c.id) && c.confidence >= (res.local ? .06 : .15));
   const sure = res.speciesId && res.confidence >= .6;
-  const maybe = !sure && res.isFigure && cands[0] && cands[0].confidence >= .35;
+  const maybe = !sure && res.isFigure && cands[0] && cands[0].confidence >= (res.local ? .06 : .35);
+  const localNote = res.local ? `<p class="hint">Modo local por silueta${res.aiError === 'no_key' ? ' (la IA aún no está configurada)' : res.aiError ? ' (la IA no respondió)' : ''}: menos preciso, elige la correcta.</p>` : '';
   const candHTML = list => list.map((c, i) => {
     const s = bySpecies(c.id), pct = Math.round(c.confidence * 100);
     const tag = maybe ? 'button' : 'div';
@@ -408,8 +414,8 @@ function showScanResult(res, q) {
   } else if (maybe) {
     setScanStatus('No estoy seguro. ¿Cuál es?');
     box.innerHTML = `<p style="font-weight:800;margin-bottom:4px">No estoy del todo seguro</p>
-      <p class="muted" style="font-size:.85rem;margin-bottom:6px">Toca la especie correcta entre mis sugerencias.</p>${candHTML(cands.filter(c => c.confidence >= .35))}
-      ${hints.length ? `<p class="hint">Consejo: ${esc(hints.join(' · '))}.</p>` : ''}
+      <p class="muted" style="font-size:.85rem;margin-bottom:6px">Toca la especie correcta entre mis sugerencias.</p>${candHTML(cands.filter(c => c.confidence >= (res.local ? .06 : .35)))}
+      ${localNote}${hints.length ? `<p class="hint">Consejo: ${esc(hints.join(' · '))}.</p>` : ''}
       <div class="toolbar" style="justify-content:center;margin-top:10px">${retry}</div>`;
     box.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => confirmScan(b.dataset.pick));
   } else {
