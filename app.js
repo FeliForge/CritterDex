@@ -484,7 +484,76 @@ $('upload').onchange = async e => {
   } catch { scanBusy = false; setScanStatus('No pude leer esa imagen.'); toast('Formato de imagen no compatible.', 'err'); }
 };
 
-const SCAN_STEPS = ['Detectando silhueta', 'Analisando traços', 'Comparando com o catálogo', 'Afinando resultado'];
+const SCAN_STEPS = ['Preparando imagem', 'Analisando a figura com IA', 'Comparando com o catálogo', 'Validando o resultado'];
+
+/** Converte imagens para JPEG compacto; a API recebe apenas dados de imagem, nunca a chave da IA. */
+function visionImagePayload(canvas) {
+  let url = canvas.toDataURL('image/jpeg', 0.86);
+  let data = url.slice(url.indexOf(',') + 1);
+  // Evita imagens excessivamente grandes nos dispositivos móveis e no limite da API.
+  if (data.length > 1_650_000) {
+    const smaller = drawScaled(canvas, 640);
+    url = smaller.toDataURL('image/jpeg', 0.74);
+    data = url.slice(url.indexOf(',') + 1);
+  }
+  return { data, mediaType: 'image/jpeg' };
+}
+
+async function requestVision(canvases) {
+  try {
+    const images = canvases.slice(0, 3).map(visionImagePayload);
+    const response = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ images }),
+      cache: 'no-store',
+    });
+    let payload;
+    try { payload = await response.json(); }
+    catch { return { ok: false, error: 'bad_response', message: 'Resposta inválida do serviço de reconhecimento.' }; }
+    if (!response.ok || !payload || !payload.ok) {
+      return { ok: false, error: payload?.error || 'api', message: payload?.message || 'O serviço de IA não conseguiu analisar a imagem.' };
+    }
+    const clamp01 = n => Math.max(0, Math.min(1, Number(n) || 0));
+    const candidates = (Array.isArray(payload.candidates) ? payload.candidates : [])
+      .filter(c => c && bySpecies(c.id))
+      .map(c => ({ id: c.id, confidence: clamp01(c.confidence) }))
+      .sort((a, b) => b.confidence - a.confidence)
+      .filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i)
+      .slice(0, 3);
+    let speciesId = bySpecies(payload.speciesId) ? payload.speciesId : null;
+    let confidence = clamp01(payload.confidence);
+    const isFigure = payload.isFigure === true;
+    if (speciesId && !candidates.some(c => c.id === speciesId)) candidates.unshift({ id: speciesId, confidence });
+    // O reconhecimento automático exige confiança alta; em casos duvidosos, o usuário escolhe uma sugestão.
+    if (!isFigure || confidence < 0.72) speciesId = null;
+    return {
+      ok: true, speciesId, confidence, candidates: candidates.slice(0, 3), isFigure,
+      quality: payload.quality || 'boa', note: String(payload.note || '').slice(0, 240),
+      local: false, source: 'vision',
+    };
+  } catch (e) {
+    return { ok: false, error: 'network', message: 'Não foi possível conectar ao serviço de IA.' };
+  }
+}
+
+/** O modo offline mostra sugestões, mas nunca registra automaticamente uma espécie. */
+function localOnlyResult(local, aiError) {
+  const candidates = local && local.ok && Array.isArray(local.ranking)
+    ? local.ranking.slice(0, 3).map(s => ({ id: s.id, confidence: Math.min(0.49, Math.max(0, Number(s.confidence) * 0.68)) }))
+      .filter(c => bySpecies(c.id) && c.confidence >= 0.06)
+    : [];
+  if (!candidates.length) return {
+    ok: true, speciesId: null, confidence: 0, candidates: [], isFigure: false, quality: 'ruim',
+    note: 'Não consegui confirmar uma criatura. Tente uma foto mais nítida, com a figura inteira e fundo simples.',
+    local: true, aiError,
+  };
+  return {
+    ok: true, speciesId: null, confidence: candidates[0].confidence, candidates, isFigure: true, quality: 'boa',
+    note: 'A IA está indisponível. Estas sugestões vêm apenas da silhueta e precisam ser conferidas.',
+    local: true, aiError,
+  };
+}
 
 async function runScan(canvases, q) {
   if (scanBusy) return;
@@ -493,36 +562,37 @@ async function runScan(canvases, q) {
   stage.classList.add('scanning');
   let step = 0; setScanStatus(SCAN_STEPS[0], true);
   clearInterval(statusTimer);
-  statusTimer = setInterval(() => { step = Math.min(step + 1, SCAN_STEPS.length - 1); setScanStatus(SCAN_STEPS[step], true); }, 900);
-  const minWait = sleep(1200);
-  let res = { ok: false };
+  statusTimer = setInterval(() => { step = Math.min(step + 1, SCAN_STEPS.length - 1); setScanStatus(SCAN_STEPS[step], true); }, 1100);
+  const minWait = sleep(700);
+  let res = { ok: false, error: 'scan', message: 'Não foi possível analisar a imagem.' };
   try {
+    // A chamada da visão começa em paralelo com o reconhecimento local para reduzir a espera.
+    const aiPromise = requestVision(canvases);
+    let local = { ok: false, ranking: [] };
     if (window.EmojiMatch) {
-      await window.EmojiMatch.loadRefs();
-      const local = window.EmojiMatch.classify(canvases);
-      if (local && local.ok && local.ranking.length) {
-        const top = local.ranking[0];
-        const conf = Math.min(0.92, top.confidence * 1.35);
-        res = {
-          ok: true,
-          speciesId: conf >= 0.28 ? top.id : null,
-          confidence: conf,
-          candidates: local.ranking.slice(0, 3).map(s => ({ id: s.id, confidence: Math.min(0.92, s.confidence * 1.35) })),
-          isFigure: true,
-          quality: 'boa',
-          note: 'Reconhecimento local por silhueta (ref/ + emoji).',
-          local: true,
-        };
-      } else {
-        res = { ok: true, speciesId: null, confidence: 0, candidates: [], isFigure: false, quality: 'ruim', note: 'Nenhuma silhueta confiável.' };
-      }
+      try { await window.EmojiMatch.loadRefs(); local = window.EmojiMatch.classify(canvases); }
+      catch (e) { console.warn('local-match', e); }
     }
-  } catch (e) { console.warn('local-match', e); res = { ok: false, error: 'local', message: String(e.message || e) }; }
+    const ai = await aiPromise;
+    if (ai && ai.ok) {
+      res = window.EmojiMatch && typeof window.EmojiMatch.merge === 'function'
+        ? window.EmojiMatch.merge(ai, local)
+        : ai;
+      // Defesa final contra respostas inconsistentes ou sem figura visível.
+      if (!res.isFigure) { res.speciesId = null; res.confidence = Math.min(Number(res.confidence) || 0, 0.2); }
+      if (res.speciesId && res.confidence < 0.72) res.speciesId = null;
+    } else {
+      res = localOnlyResult(local, ai && ai.error);
+      if (ai && ai.error === 'no_key') console.info('CritterDex: ANTHROPIC_API_KEY não configurada; usando sugestões locais.');
+    }
+  } catch (e) {
+    console.warn('scan-pipeline', e);
+    res = { ok: false, error: 'scan', message: 'O reconhecimento falhou. Tente outra foto.' };
+  }
   await minWait;
   clearInterval(statusTimer); stage.classList.remove('scanning'); scanBusy = false;
   showScanResult(res, q);
 }
-
 function scanError(res) {
   if (res.error === 'local') return res.message || 'Falha no reconhecimento local.';
   return res.message || 'Não consegui analisar a imagem. Tente de novo.';
