@@ -539,13 +539,23 @@ async function requestVision(canvases) {
 
 /** O modo offline mostra sugestões, mas nunca registra automaticamente uma espécie. */
 function localOnlyResult(local, aiError) {
-  const candidates = local && local.ok && Array.isArray(local.ranking)
-    ? local.ranking.slice(0, 3).map(s => ({ id: s.id, confidence: Math.min(0.49, Math.max(0, Number(s.confidence) * 0.68)) }))
+  const ranking = local && local.ok && Array.isArray(local.ranking) ? local.ranking : [];
+  const topScore = ranking.length ? Number(ranking[0].score) || 0 : 0;
+  // Não mostrar um "palpite" só porque a softmax precisa ordenar uma lista: a silhueta também precisa combinar.
+  const candidates = topScore >= 0.30
+    ? ranking
+      .filter(s => (Number(s.score) || 0) >= Math.max(0.24, topScore - 0.10))
+      .slice(0, 3)
+      .map(s => ({ id: s.id, confidence: Math.min(0.49, Math.max(0.06, Number(s.confidence) * 0.68)) }))
       .filter(c => bySpecies(c.id) && c.confidence >= 0.06)
     : [];
   if (!candidates.length) return {
     ok: true, speciesId: null, confidence: 0, candidates: [], isFigure: false, quality: 'ruim',
-    note: 'Não consegui confirmar uma criatura. Tente uma foto mais nítida, com a figura inteira e fundo simples.',
+    note: aiError === 'no_key'
+      ? 'A IA ainda não está configurada no servidor e a silhueta não foi suficiente para sugerir uma espécie.'
+      : aiError
+        ? 'A IA não respondeu e a silhueta não foi suficiente para sugerir uma espécie. Tente outra foto.'
+        : 'Não consegui confirmar uma criatura. Tente uma foto mais nítida, com a figura inteira e fundo simples.',
     local: true, aiError,
   };
   return {
@@ -600,27 +610,28 @@ function scanError(res) {
 
 function qualityHints(res, q) {
   const h = [];
-  if (q?.mean < 45 || res?.quality === 'oscura') h.push('la foto está oscura: busca más luz');
-  if (q?.sharp < 5 || res?.quality === 'borrosa') h.push('salió borrosa: apoya el móvil y deja enfocar');
-  if (res?.quality === 'muy_lejos') h.push('acércate un poco más');
-  if (res?.quality === 'parcial') h.push('encuadra la figura completa');
+  if (q?.mean < 45 || res?.quality === 'oscura') h.push('a foto está escura; tente mais iluminação');
+  if (q?.sharp < 5 || res?.quality === 'borrosa') h.push('a foto está desfocada; apoie o celular e espere o foco');
+  if (res?.quality === 'muy_lejos') h.push('aproxime um pouco a câmera');
+  if (res?.quality === 'parcial') h.push('enquadre a figura inteira');
   return h;
 }
 
 function showScanResult(res, q) {
   const box = $('modelResult'); box.classList.remove('hidden');
-  const retry = `<button class="ghost" id="retryScan">Reintentar</button>`;
+  const retry = '<button class="ghost" id="retryScan">Tentar novamente</button>';
   if (!res.ok) {
-    setScanStatus('No se pudo completar el análisis.');
+    setScanStatus('Não foi possível concluir a análise.');
     box.innerHTML = `<p style="font-weight:700;margin-bottom:10px">⚠️ ${esc(scanError(res))}</p><div class="toolbar" style="justify-content:center">${retry}</div>`;
     $('retryScan').onclick = () => lastShots && runScan(lastShots.canvases, lastShots.q);
     return;
   }
   const hints = qualityHints(res, q);
   const cands = (res.candidates || []).filter(c => bySpecies(c.id) && c.confidence >= (res.local ? .06 : .15));
-  const sure = res.speciesId && res.confidence >= .6;
+  const sure = !!(res.speciesId && res.confidence >= .72);
   const maybe = !sure && res.isFigure && cands[0] && cands[0].confidence >= (res.local ? .06 : .35);
-  const localNote = res.local ? `<p class="hint">Modo local por silueta${res.aiError === 'no_key' ? ' (la IA aún no está configurada)' : res.aiError ? ' (la IA no respondió)' : ''}: menos preciso, elige la correcta.</p>` : '';
+  const localReason = res.aiError === 'no_key' ? ' (a IA não está configurada)' : res.aiError ? ' (a IA não respondeu)' : '';
+  const localNote = res.local ? `<p class="hint">Modo offline por silhueta${localReason}: menos preciso; confira as sugestões antes de escolher.</p>` : '';
   const candHTML = list => list.map((c, i) => {
     const s = bySpecies(c.id), pct = Math.round(c.confidence * 100);
     const tag = maybe ? 'button' : 'div';
@@ -630,24 +641,24 @@ function showScanResult(res, q) {
   }).join('');
 
   if (sure) {
-    setScanStatus('¡Figura reconocida!');
-    box.innerHTML = `<p style="font-size:1.1rem;font-weight:800;margin-bottom:6px">Es ${esc(bySpecies(res.speciesId).name)}</p>
-      <p class="muted" style="margin-bottom:8px;font-size:.85rem">Confianza del modelo: ${Math.round(res.confidence * 100)}%</p>
+    setScanStatus('Figura reconhecida!');
+    box.innerHTML = `<p style="font-size:1.1rem;font-weight:800;margin-bottom:6px">É ${esc(bySpecies(res.speciesId).name)}</p>
+      <p class="muted" style="margin-bottom:8px;font-size:.85rem">Confiança estimada: ${Math.round(res.confidence * 100)}%</p>
       ${candHTML([{ id: res.speciesId, confidence: res.confidence }, ...cands.filter(c => c.id !== res.speciesId).slice(0, 2)])}
-      <div class="toolbar" style="justify-content:center;margin-top:10px"><button class="primary" id="confirmDiscover">Confirmar descubrimiento</button>${retry}</div>`;
+      <div class="toolbar" style="justify-content:center;margin-top:10px"><button class="primary" id="confirmDiscover">Confirmar descoberta</button>${retry}</div>`;
     $('confirmDiscover').onclick = () => confirmScan(res.speciesId);
   } else if (maybe) {
-    setScanStatus('No estoy seguro. ¿Cuál es?');
-    box.innerHTML = `<p style="font-weight:800;margin-bottom:4px">No estoy del todo seguro</p>
-      <p class="muted" style="font-size:.85rem;margin-bottom:6px">Toca la especie correcta entre mis sugerencias.</p>${candHTML(cands.filter(c => c.confidence >= (res.local ? .06 : .35)))}
-      ${localNote}${hints.length ? `<p class="hint">Consejo: ${esc(hints.join(' · '))}.</p>` : ''}
+    setScanStatus('Não tenho certeza. Qual é a criatura?');
+    box.innerHTML = `<p style="font-weight:800;margin-bottom:4px">Ainda não tenho certeza</p>
+      <p class="muted" style="font-size:.85rem;margin-bottom:6px">Escolha a espécie correta entre as sugestões.</p>${candHTML(cands.filter(c => c.confidence >= (res.local ? .06 : .35)))}
+      ${localNote}${hints.length ? `<p class="hint">Dica: ${esc(hints.join(' · '))}.</p>` : ''}
       <div class="toolbar" style="justify-content:center;margin-top:10px">${retry}</div>`;
     box.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => confirmScan(b.dataset.pick));
   } else {
-    setScanStatus('No reconocí ninguna especie.');
-    box.innerHTML = `<p style="font-weight:800;margin-bottom:6px">😕 No reconocí ninguna figura del catálogo</p>
-      <p class="muted" style="font-size:.85rem;max-width:460px;margin:0 auto">${res.note ? esc(res.note) : 'Prueba con la figura completa, de perfil y con fondo liso.'}</p>
-      ${hints.length ? `<p class="hint">Consejo: ${esc(hints.join(' · '))}.</p>` : ''}
+    setScanStatus('Não reconheci nenhuma espécie.');
+    box.innerHTML = `<p style="font-weight:800;margin-bottom:6px">😕 Não reconheci nenhuma figura do catálogo</p>
+      <p class="muted" style="font-size:.85rem;max-width:460px;margin:0 auto">${res.note ? esc(res.note) : 'Tente fotografar a figura inteira, de perfil e com um fundo simples.'}</p>
+      ${hints.length ? `<p class="hint">Dica: ${esc(hints.join(' · '))}.</p>` : ''}
       <div class="toolbar" style="justify-content:center;margin-top:10px">${retry}</div>`;
   }
   $('retryScan')?.addEventListener('click', () => lastShots && runScan(lastShots.canvases, lastShots.q));
@@ -658,7 +669,7 @@ function confirmScan(id) {
   const sp = bySpecies(id); if (!sp) return;
   const isNew = discover(id);
   $('modelResult').classList.add('hidden');
-  setScanStatus(isNew ? '¡Especie registrada en tu Dex!' : 'Ya estaba en tu Dex.');
+  setScanStatus(isNew ? 'Espécie registrada na sua Dex!' : 'Essa espécie já está na sua Dex.');
   showReveal(sp, isNew);
 }
 
