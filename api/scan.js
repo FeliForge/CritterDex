@@ -4,7 +4,8 @@
 const SPECIES = require('./_species');
 const REF_SHEET = require('./_refsheet');
 
-const MODEL = process.env.SCAN_MODEL || 'claude-sonnet-5-5';
+// Prioriza precisão visual. SCAN_MODEL pode sobrescrever o padrão sem alteração de código.
+const MODEL = process.env.SCAN_MODEL || 'claude-opus-5-5';
 const MAX_IMAGES = 3;
 const MAX_B64_CHARS = 1_800_000; // ~1.3 MB por imagen ya reducida por el cliente
 const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -97,6 +98,18 @@ async function readBody(req) {
 }
 
 module.exports = async function handler(req, res) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  // Diagnóstico público e seguro: informa a configuração, sem expor segredo algum.
+  if (req.method === 'GET') {
+    return json(res, 200, {
+      ok: true,
+      provider: 'Anthropic',
+      model: MODEL,
+      configured: Boolean(key),
+      catalogSize: SPECIES.length,
+      mode: key ? 'vision-enabled' : 'offline-suggestions-only',
+    });
+  }
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'method' });
   // Solo aceptamos peticiones hechas desde este mismo sitio (frena el uso de la clave desde otras webs).
   const origin = req.headers.origin;
@@ -105,7 +118,6 @@ module.exports = async function handler(req, res) {
     try { ok = new URL(origin).host === req.headers.host; } catch { /* origen inválido */ }
     if (!ok) return json(res, 403, { ok: false, error: 'origin', message: 'Origen no permitido.' });
   }
-  const key = process.env.ANTHROPIC_API_KEY;
   if (!key) return json(res, 503, { ok: false, error: 'no_key', message: 'Falta ANTHROPIC_API_KEY en las variables de entorno de Vercel.' });
 
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'anon';
