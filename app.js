@@ -563,8 +563,8 @@ function showScanResult(res, q) {
   const cands = (res.candidates || []).filter(c => bySpecies(c.id) && c.confidence >= (res.local ? .06 : .15));
   const sure = !!(res.speciesId && res.confidence >= .72);
   const maybe = !sure && res.isFigure && cands[0] && cands[0].confidence >= (res.local ? .06 : .35);
-  const localReason = res.aiError === 'no_key' ? ' (a IA não está configurada)' : res.aiError ? ' (a IA não respondeu)' : '';
-  const localNote = res.local ? `<p class="hint">Modo offline por silhueta${localReason}: menos preciso; confira as sugestões antes de escolher.</p>` : '';
+  const localReason = '';
+  const localNote = res.local ? `<p class="hint">Processamento local por silhueta${localReason}: menos preciso; confira as sugestões antes de escolher.</p>` : '';
   const candHTML = list => list.map((c, i) => {
     const s = bySpecies(c.id), pct = Math.round(c.confidence * 100);
     const tag = maybe ? 'button' : 'div';
@@ -576,7 +576,7 @@ function showScanResult(res, q) {
   if (sure) {
     setScanStatus('Figura reconhecida!');
     box.innerHTML = `<p style="font-size:1.1rem;font-weight:800;margin-bottom:6px">É ${esc(bySpecies(res.speciesId).name)}</p>
-      <p class="muted" style="margin-bottom:8px;font-size:.85rem">Confiança estimada: ${Math.round(res.confidence * 100)}%</p>
+      <p class="muted" style="margin-bottom:8px;font-size:.85rem">Índice de correspondência visual: ${Math.round(res.confidence * 100)}% (não é probabilidade de acerto)</p>
       ${candHTML([{ id: res.speciesId, confidence: res.confidence }, ...cands.filter(c => c.id !== res.speciesId).slice(0, 2)])}
       <div class="toolbar" style="justify-content:center;margin-top:10px"><button class="primary" id="confirmDiscover">Confirmar descoberta</button>${retry}</div>`;
     $('confirmDiscover').onclick = () => confirmScan(res.speciesId);
