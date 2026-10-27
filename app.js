@@ -564,7 +564,7 @@ function showScanResult(res, q) {
   const sure = !!(res.speciesId && res.confidence >= .72);
   const maybe = !sure && res.isFigure && cands[0] && cands[0].confidence >= (res.local ? .06 : .35);
   const localReason = '';
-  const localNote = res.local ? `<p class="hint">Processamento local por silhueta${localReason}: menos preciso; confira as sugestões antes de escolher.</p>` : '';
+  const localNote = res.local ? `<p class="hint">Processamento local sem IA: silhuetas, proporções e pontos visuais. Os percentuais são índices de correspondência, não probabilidades. Confira as sugestões antes de escolher.</p>` : '';
   const candHTML = list => list.map((c, i) => {
     const s = bySpecies(c.id), pct = Math.round(c.confidence * 100);
     const tag = maybe ? 'button' : 'div';
